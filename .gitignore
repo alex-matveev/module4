@@ -1,2 +1,6 @@
 build/
 .vscode/
+/.vs/module4-git/FileContentIndex
+/.vs/module4-git/v17
+/.vs
+/CMakeSettings.json

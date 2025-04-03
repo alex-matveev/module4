@@ -67,14 +67,13 @@ template <typename T> std::pair<T, T> two_dots_line(T x1, T y1, T x2, T y2) {
  \param[in] - dep       : вектор глубин (без рельефа);
  \param[in] - vel       : вектор скоростей. Его размер должен быть на 1 больше, чем у dep.
  \param[in] - relief    : значение рельефа (начальный уровень).
- \param[in] - border_num: количество интервалов  между опорными точками
  \param[in] - v_const   : опциональное постоянное значение скорости для точек, где z < relief.
  \return - vel_interp : вектор интерполированных скоростей.
 */
 template <typename T>
 Eigen::VectorX<T>
 interp_velocity(const Eigen::Ref<const Eigen::VectorX<T>> &z, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
-  const Eigen::Ref<const Eigen::VectorX<T>> &vel, T relief, int64_t border_num,
+  const Eigen::Ref<const Eigen::VectorX<T>> &vel, T relief,
                 std::optional<T> v_const = std::nullopt) {
   Eigen::VectorX<T> vel_interp = Eigen::VectorX<T>::Constant(
       z.size(), v_const.has_value() ? v_const.value() : 0);
@@ -94,7 +93,7 @@ interp_velocity(const Eigen::Ref<const Eigen::VectorX<T>> &z, const Eigen::Ref<c
       vel_interp(j) = a * j + b;
       ++j;
   }
-  for (Eigen::Index i = 0; i < border_num - 1; ++i) {
+  for (Eigen::Index i = 0; i < dep.size() - 1; ++i) {
     // Вычисляем коэффициенты для текущего интервала
     std::tie(a, b) =
         two_dots_line(dep(i), vel(i+1), dep(i + 1), vel(i + 2));
@@ -132,7 +131,6 @@ Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &r
 \param[in] - depths    : вектор из векторов глубин для каждого столбца.
 \param[in] - velocities: вектор из векторов скоростей для каждого слоя.
 \param[in] - relief    : вектор значений рельефа для каждого столбца.
-\param[in] - border_num: число интервалов для интерполяции.
 \param[in] - size      : число столбцов (размер куба по второй оси).
 \param[in] - v_const   : опциональное постоянное значение скорости для точек, где z < relief.
 
@@ -141,7 +139,7 @@ template <typename T>
 Eigen::MatrixX<T> get_cube(const Eigen::VectorX<T> &z,
                            const std::vector<Eigen::VectorX<T>> &depths,
                            const std::vector<Eigen::VectorX<T>> &velocities,
-                           const Eigen::VectorX<T> &relief, int64_t border_num,
+                           const Eigen::VectorX<T> &relief,
                            int64_t size, const std::optional<T> &v_const) {
   Eigen::MatrixX<T> cube(z.size(), size);
 
@@ -151,7 +149,6 @@ Eigen::MatrixX<T> get_cube(const Eigen::VectorX<T> &z,
   for (int64_t i = 0; i < size; ++i) {
 
     // Извлекаем i-й элемент из каждого вектора в velocities.
-    // Предполагается, что velocities.size() = border_num + 1.
     int64_t num_layers = velocities.size();
     Eigen::VectorX<T> vel_vec(num_layers);
     for (int64_t j = 0; j < num_layers; ++j) {
@@ -173,7 +170,7 @@ Eigen::MatrixX<T> get_cube(const Eigen::VectorX<T> &z,
     // Вызываем интерполяцию для текущего столбца и записываем результат в
     // соответствующую колонку матрицы.
     cube.col(i) =
-        interp_velocity<T>(z, dep_vec, vel_vec, rel, border_num, v_const);
+        interp_velocity<T>(z, dep_vec, vel_vec, rel, v_const);
   }
   return cube;
 }
@@ -214,7 +211,6 @@ private:
     std::vector<Eigen::VectorX<T>> m_depths;    ///< Вектор векторов глубин для каждого столбца.
     std::vector<Eigen::VectorX<T>> m_velocities;  ///< Вектор векторов скоростей (размер = border_num + 1).
     Eigen::VectorX<T> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
-    int64_t m_borderNum;                           ///< Число интервалов между опорными точками.
     Eigen::VectorX<T> m_z;                      ///< Вектор вертикальных координат.
     std::optional<T> m_v_const;                 ///< Опциональное значение скорости для точек, где z < relief.
 
@@ -230,7 +226,6 @@ public:
       * \param depths Вектор векторов глубин для каждого столбца.
       * \param velocities Вектор векторов скоростей (ожидается размер border_num + 1).
       * \param relief Вектор значений рельефа для каждого столбца.
-      * \param border_num Число интервалов для интерполяции.
       * \param z Вектор вертикальных координат.
       * \param v_const Опциональное постоянное значение скорости для точек, где z < relief.
       * \param currentRowBlock Начальный индекс блока по строкам (по умолчанию 0).
@@ -239,12 +234,12 @@ public:
   submatrix_iterator(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
                     const std::vector<Eigen::VectorX<T>> &depths,
                     const std::vector<Eigen::VectorX<T>> &velocities,
-                    const Eigen::VectorX<T> &relief, int64_t border_num,
+                    const Eigen::VectorX<T> &relief,
                     Eigen::VectorX<T> z, std::optional<T> v_const,
                     int64_t currentRowBlock = 0, int64_t currentColBlock = 0)
       : m_matrix(matrix), m_blockRows(blockRows), m_blockCols(blockCols),
         m_depths(depths),
-        m_velocities(velocities), m_relief(relief), m_borderNum(border_num), m_z(z),
+        m_velocities(velocities), m_relief(relief), m_z(z),
         m_v_const(v_const), m_currentRowBlock(currentRowBlock),
         m_currentColBlock(currentColBlock) {
     int64_t step_rows = blockRows;
@@ -290,7 +285,7 @@ public:
 
     // Генерируем куб для текущего блока
     Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
-        m_z, block_depths, block_velocities, block_relief, m_borderNum,
+        m_z, block_depths, block_velocities, block_relief,
         current_block_cols, m_v_const);
 
     sub_matrix = cube;
@@ -372,7 +367,6 @@ public:
      * \param depths Вектор векторов глубин для каждого столбца.
      * \param velocities Вектор векторов скоростей.
      * \param relief Вектор значений рельефа для каждого столбца.
-     * \param border_num Число интервалов.
      * \param z Вектор вертикальных координат.
      * \param v_const Опциональное значение скорости.
      * \return Итератор, указывающий на первый блок.
@@ -381,10 +375,10 @@ public:
   begin(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
         const std::vector<Eigen::VectorX<T>> &depths,
         const std::vector<Eigen::VectorX<T>> &velocities,
-        const Eigen::VectorX<T> &relief, int64_t border_num, Eigen::VectorX<T> z,
+        const Eigen::VectorX<T> &relief, Eigen::VectorX<T> z,
         std::optional<T> v_const) {
     return submatrix_iterator(matrix, blockRows, blockCols, depths, velocities, relief,
-                             border_num, z, v_const);
+                              z, v_const);
   }
   /*!
    * \brief Создает итератор, указывающий на конец последовательности блоков.
@@ -395,7 +389,6 @@ public:
    * \param depths Вектор векторов глубин для каждого столбца.
    * \param velocities Вектор векторов скоростей.
    * \param relief Вектор значений рельефа для каждого столбца.
-   * \param border_num Число интервалов.
    * \param z Вектор вертикальных координат.
    * \param v_const Опциональное значение скорости.
    * \return Итератор, указывающий на конец последовательности блоков.
@@ -403,10 +396,10 @@ public:
   static submatrix_iterator end(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
                                const std::vector<Eigen::VectorX<T>> &depths,
                                const std::vector<Eigen::VectorX<T>> &velocities,
-                               const Eigen::VectorX<T> &relief, int64_t border_num,
+                               const Eigen::VectorX<T> &relief,
                                Eigen::VectorX<T> z, std::optional<T> v_const) {
     submatrix_iterator it(matrix, blockRows, blockCols,
-                         depths, velocities, relief, border_num, z, v_const);
+                         depths, velocities, relief,  z, v_const);
     it.m_currentRowBlock = it.m_numRowBlocks;
     it.m_currentColBlock = 0;
     return it;
