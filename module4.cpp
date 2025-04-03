@@ -6,33 +6,7 @@ using Eigen::VectorXd;
 using Eigen::VectorXf;
 
 namespace layer_2_grid{
-    /*!
-     * \brief Генерирует вектор значений оси z.
-     *
-     * Функция генерирует равномерно распределённый вектор значений от \a z_min до \a z_max с шагом \a dz.
-     * Если \a dz не положительно или \a z_max меньше или равен \a z_min, возвращается пустой вектор.
-     *
-     * \tparam T Тип данных элементов вектора.
-     * \param[in] z_min Нижняя граница оси z.
-     * \param[in] z_max Верхняя граница оси z.
-     * \param[in] dz Шаг изменения значений по оси z.
-     * \return Вектор значений от \a z_min до \a z_max с заданным шагом.
-     */
-template <typename T> Eigen::VectorX<T> get_z_axis(T z_min, T z_max, T dz) {
-  if (dz <= 0 || z_max <= z_min) {
-    return Eigen::VectorX<T>(); // Некорректные параметры
-  }
-
-  const T delta = z_max - z_min;
-  const T epsilon = std::numeric_limits<T>::epsilon();
-  const auto n = static_cast<int64_t>(std::ceil((delta - epsilon) / dz));
-
-  if (n <= 0) {
-    return Eigen::VectorX<T>();
-  }
-
-  return Eigen::VectorX<T>::LinSpaced(n, z_min, z_min + (n - 1) * dz);
-}
+    
 /*!
  * \brief Вычисляет параметры прямой, проходящей через две точки.
  *
@@ -140,44 +114,51 @@ Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &r
 */
 template <typename T>
 Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
-                           const std::vector<Eigen::VectorX<T>> &depths,
-                           const std::vector<Eigen::VectorX<T>> &velocities,
-                           const Eigen::VectorX<T> &relief,
-                           int64_t size, const std::optional<T> &v_const) {
-    
-  const T delta = z_max - z_min;
-  const T epsilon = std::numeric_limits<T>::epsilon();
-  const auto z_size = static_cast<int64_t>(std::ceil((delta - epsilon) / dz));
-  Eigen::MatrixX<T> cube(z_size, size);
+    const std::vector<Eigen::MatrixX<T>>& depths,
+    const std::vector<Eigen::MatrixX<T>>& velocities,
+    const Eigen::MatrixX<T>& relief,
+    int64_t block_rows, int64_t block_cols,
+    const std::optional<T>& v_const) {
+    const T delta = z_max - z_min;
+    const T epsilon = std::numeric_limits<T>::epsilon();
+    const int64_t z_size = static_cast<int64_t>(std::ceil((delta - epsilon) / dz));
 
+    const int64_t num_pixels = block_rows * block_cols;
+    Eigen::MatrixX<T> cube(z_size, num_pixels);
 
-  for (int64_t i = 0; i < size; ++i) {
+    // Число глубинных срезов определяется размером вектора depths
+    const int64_t num_depth_slices = depths.size();
 
-    // Извлекаем i-й элемент из каждого вектора в velocities.
-    int64_t num_layers = velocities.size();
-    Eigen::VectorX<T> vel_vec(num_layers);
-    for (int64_t j = 0; j < num_layers; ++j) {
-      vel_vec(j) = velocities[j](i);
+    // Проходим по всем пикселям блока (индексируем в порядке row-major)
+    for (int64_t r = 0; r < block_rows; ++r) {
+        for (int64_t c = 0; c < block_cols; ++c) {
+            int64_t idx = r * block_cols + c;
+
+            // Собираем векторы значений глубины и скорости для текущего пикселя из всех срезов
+            Eigen::VectorX<T> dep_vec(num_depth_slices);
+            Eigen::VectorX<T> vel_vec(num_depth_slices + 1);
+            for (int64_t d = 0; d < num_depth_slices; ++d) {
+                // Из каждого среза выбираем значение в координатах (r, c)
+                dep_vec(d) = depths[d](r, c);
+            }
+            for (int64_t d = 0; d < num_depth_slices+1; ++d) {
+                // Из каждого среза выбираем значение в координатах (r, c)
+                vel_vec(d) = velocities[d](r, c);
+            }
+            // Нормализуем значения глубины относительно z_min и dz
+            dep_vec = (dep_vec.array() - z_min) / dz;
+            T rel_val = (relief(r, c) - z_min) / dz;
+
+            // Интерполируем для данного пикселя.
+            // Функция interp_velocity должна вернуть вектор длины z_size,
+            // представляющий распределение интерполированных значений по оси z.
+            cube.col(idx) = interp_velocity<T>(z_size, dep_vec, vel_vec, rel_val, v_const);
+           // std::cout << "dep_vec" << dep_vec << std::endl;
+            //std::cout << "vel_vec" << vel_vec << std::endl;
+            //std::cout << "cube" << cube << std::endl;
+        }
     }
-
-    // Извлекаем i-й элемент из каждого вектора в depths.
-    // Предполагается, что depths.size() = num_layers - 1.
-    int64_t num_depth = depths.size();
-
-    Eigen::VectorX<T> dep_vec(num_depth);
-    for (int64_t j = 0; j < num_depth; ++j) {
-      dep_vec(j) = depths[j](i);
-    }
-
-    dep_vec = (dep_vec.array() - z_min) / dz;
-    T rel = (relief(i) - z_min) / dz;
-
-    // Вызываем интерполяцию для текущего столбца и записываем результат в
-    // соответствующую колонку матрицы.
-    cube.col(i) =
-        interp_velocity<T>(z_size, dep_vec, vel_vec, rel, v_const);
-  }
-  return cube;
+    return cube;
 }
 
 } // namespace layer_2_grid
@@ -199,12 +180,11 @@ template <class T> class submatrix_iterator {
 public:
   // Типы, необходимые для forward iterator
   using value_type = rblock<T>;              /*!< Тип элемента*/
-  using reference = Eigen::Block<rblock<T>>; /*!< Тип ссылки на элемент*/
+  using reference = rblock<T>; /*!< Тип ссылки на элемент*/
   using pointer = void; /*!< Тип указателя на элемент*/
   using iterator_category = std::forward_iterator_tag; /*!< Категория итератора*/
 
 private:
-    rblock<T>& m_matrix;      ///< Исходная матрица, содержащая данные для интерполяции.
     int64_t m_blockRows;          ///< Размер подматрицы по строкам.
     int64_t m_blockCols;          ///< Размер подматрицы по столбцам.
     int64_t m_numRowBlocks;       ///< Общее количество блоков по строкам.
@@ -212,14 +192,18 @@ private:
     int64_t m_currentRowBlock;    ///< Индекс текущего блока по строкам.
     int64_t m_currentColBlock;    ///< Индекс текущего блока по столбцам.
 
+    int64_t m_start_row = 0;
+    int64_t m_start_col = 0;
+    int64_t m_current_block_rows;
+    int64_t m_current_block_cols;
     // Члены для интерполяции
-    std::vector<Eigen::VectorX<T>> m_depths;    ///< Вектор векторов глубин для каждого столбца.
-    std::vector<Eigen::VectorX<T>> m_velocities;  ///< Вектор векторов скоростей (размер = border_num + 1).
-    Eigen::VectorX<T> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
-    T m_z_min;///< Вектор вертикальных координат.
-    T m_z_max;///< Вектор вертикальных координат.
-    T m_dz;///< Вектор вертикальных координат.
-    std::optional<T> m_v_const;                 ///< Опциональное значение скорости для точек, где z < relief.
+    std::vector<Eigen::MatrixX<T>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
+    std::vector<Eigen::MatrixX<T>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
+    Eigen::MatrixX<T> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
+    T m_z_min;                                    ///< Вектор вертикальных координат.
+    T m_z_max;                                    ///< Вектор вертикальных координат.
+    T m_dz;                                       ///< Вектор вертикальных координат.
+    std::optional<T> m_v_const;                   ///< Опциональное значение скорости для точек, где z < relief.
 
 public:
     /*!
@@ -227,7 +211,7 @@ public:
       *
       * Инициализирует итератор, вычисляя количество блоков по строкам и столбцам.
       *
-      * \param matrix Ссылка на исходную матрицу для интерполяции.
+
       * \param blockRows Размер блока по строкам.
       * \param blockCols Размер блока по столбцам.
       * \param depths Вектор векторов глубин для каждого столбца.
@@ -240,23 +224,25 @@ public:
       * \param currentRowBlock Начальный индекс блока по строкам (по умолчанию 0).
       * \param currentColBlock Начальный индекс блока по столбцам (по умолчанию 0).
       */
-  submatrix_iterator(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
-                    const std::vector<Eigen::VectorX<T>> &depths,
-                    const std::vector<Eigen::VectorX<T>> &velocities,
-                    const Eigen::VectorX<T> &relief,
+  submatrix_iterator(int64_t blockRows, int64_t blockCols, 
+                    const std::vector<Eigen::MatrixX<T>> &depths,
+                    const std::vector<Eigen::MatrixX<T>> &velocities,
+                    const Eigen::MatrixX<T> &relief,
                     T z_min, T z_max, T dz, std::optional<T> v_const,
                     int64_t currentRowBlock = 0, int64_t currentColBlock = 0)
-      : m_matrix(matrix), m_blockRows(blockRows), m_blockCols(blockCols),
+      :  m_blockRows(blockRows), m_blockCols(blockCols),
         m_depths(depths),
         m_velocities(velocities), m_relief(relief), m_z_min(z_min), m_z_max(z_max), m_dz(dz),
         m_v_const(v_const), m_currentRowBlock(currentRowBlock),
         m_currentColBlock(currentColBlock) {
+      m_current_block_rows = relief.rows() < blockRows ? relief.rows() : blockRows;
+      m_current_block_cols = relief.cols() < blockCols ? relief.cols() : blockCols;
     int64_t step_rows = blockRows;
-    int64_t total_effective_rows = matrix.rows();
+    int64_t total_effective_rows = relief.rows();
     m_numRowBlocks = (total_effective_rows + step_rows - 1) / step_rows;
 
     int64_t step_cols = blockCols;
-    int64_t total_effective_cols = matrix.cols();
+    int64_t total_effective_cols = relief.cols();
     m_numColBlocks = (total_effective_cols + step_cols - 1) / step_cols;
   }
 
@@ -268,36 +254,34 @@ public:
    * \return Ссылка на подматрицу (тип Eigen::Block<rblock<T>>).
    */
   reference operator*() {
-    int64_t start_row = m_currentRowBlock * m_blockRows;
-    int64_t start_col = m_currentColBlock * m_blockCols;
-    int64_t current_block_rows = (m_currentRowBlock == m_numRowBlocks - 1)
-                               ? (m_matrix.rows() - start_row)
-                               : m_blockRows;
-    int64_t current_block_cols = (m_currentColBlock == m_numColBlocks - 1)
-                               ? (m_matrix.cols() - start_col)
-                               : m_blockCols;
-    auto sub_matrix =
-        m_matrix.block(start_row, start_col, current_block_rows, current_block_cols);
+      
+      // Получаем блок исходной матрицы для заполнения
+      //auto block = m_matrix.block(start_row, start_col, current_block_rows, current_block_cols);
 
-    // Создаем сегменты данных для текущего блока по столбцам
-    std::vector<Eigen::VectorX<T>> block_depths;
-    for (const auto &d : m_depths) {
-      block_depths.push_back(d.segment(start_col, current_block_cols));
-    }
+      
+      // Извлекаем блок из каждой матрицы глубин (m_depths)
+      std::vector<Eigen::MatrixX<T>> block_depths;
+      for (const auto& d : m_depths) {
+          block_depths.push_back(d.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols));
+      }
+      // Извлекаем блок из каждой матрицы скоростей (m_velocities)
+      std::vector<Eigen::MatrixX<T>> block_velocities;
+      for (const auto& v : m_velocities) {
+          block_velocities.push_back(v.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols));
+      }
+      // Извлекаем блок из матрицы рельефа
+      Eigen::MatrixXd block_relief = m_relief.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols);
 
-    std::vector<Eigen::VectorX<T>> block_velocities;
-    for (const auto &v : m_velocities) {
-      block_velocities.push_back(v.segment(start_col, current_block_cols));
-    }
+      // Выполняем интерполяцию для выбранного блока
+      Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
+          m_z_min, m_z_max, m_dz, block_depths, block_velocities, block_relief,
+          m_current_block_rows, m_current_block_cols, m_v_const);
+      // Присваиваем результат интерполяции блоку исходной матрицы
+     // block = cube;
+      
+      
 
-    Eigen::VectorX<T> block_relief = m_relief.segment(start_col, current_block_cols);
-    // Генерируем куб для текущего блока
-    Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
-        m_z_min, m_z_max, m_dz,  block_depths, block_velocities, block_relief,
-        current_block_cols, m_v_const);
-
-    sub_matrix = cube;
-    return sub_matrix;
+      return cube;
   }
 
   // Оператор -> (не требуется, так как value_type — не объект)
@@ -318,6 +302,14 @@ public:
       m_currentColBlock = 0;
       m_currentRowBlock++;
     }
+     m_start_row = m_currentRowBlock * m_blockRows;
+     m_start_col = m_currentColBlock * m_blockCols;
+     m_current_block_rows = (m_currentRowBlock == m_numRowBlocks - 1)
+        ? (m_relief.rows() - m_start_row)
+        : m_blockRows;
+     m_current_block_cols = (m_currentColBlock == m_numColBlocks - 1)
+        ? (m_relief.cols() - m_start_col)
+        : m_blockCols;
     return *this;
   }
 
@@ -359,17 +351,17 @@ public:
    *
    * \return Пара целых чисел: индекс строки и индекс столбца текущего блока.
    */
-  std::pair<int64_t, int64_t> index() { return {m_currentRowBlock, m_currentColBlock}; }
+
+  std::pair<int64_t, int64_t> index() { return {m_start_row, m_start_col}; }
   /*!
    * \brief Возвращает количество блоков по строкам и столбцам.
    *
    * \return Пара целых чисел: количество блоков по строкам и количество блоков по столбцам.
    */
-  std::pair<int64_t, int64_t> shape() { return {m_numRowBlocks, m_numColBlocks}; }
+  std::pair<int64_t, int64_t> shape() { return { m_current_block_rows , m_current_block_cols }; }
   /*!
      * \brief Создает итератор, указывающий на начало последовательности блоков.
      *
-     * \param matrix Исходная матрица для интерполяции.
      * \param blockRows Размер блока по строкам.
      * \param blockCols Размер блока по столбцам.
      * \param depths Вектор векторов глубин для каждого столбца.
@@ -382,18 +374,17 @@ public:
      * \return Итератор, указывающий на первый блок.
      */
   static submatrix_iterator
-  begin(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
-        const std::vector<Eigen::VectorX<T>> &depths,
-        const std::vector<Eigen::VectorX<T>> &velocities,
-        const Eigen::VectorX<T> &relief, T m_z_min, T m_z_max, T m_dz,
+  begin(int64_t blockRows, int64_t blockCols,
+        const std::vector<Eigen::MatrixX<T>> &depths,
+        const std::vector<Eigen::MatrixX<T>> &velocities,
+        const Eigen::MatrixX<T> &relief, T m_z_min, T m_z_max, T m_dz,
         std::optional<T> v_const) {
-    return submatrix_iterator(matrix, blockRows, blockCols, depths, velocities, relief,
+    return submatrix_iterator( blockRows, blockCols, depths, velocities, relief,
                               m_z_min, m_z_max, m_dz, v_const);
   }
   /*!
    * \brief Создает итератор, указывающий на конец последовательности блоков.
    *
-   * \param matrix Исходная матрица для интерполяции.
    * \param blockRows Размер блока по строкам.
    * \param blockCols Размер блока по столбцам.
    * \param depths Вектор векторов глубин для каждого столбца.
@@ -405,12 +396,12 @@ public:
    * \param v_const Опциональное значение скорости.
    * \return Итератор, указывающий на конец последовательности блоков.
    */
-  static submatrix_iterator end(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
-                               const std::vector<Eigen::VectorX<T>> &depths,
-                               const std::vector<Eigen::VectorX<T>> &velocities,
-                               const Eigen::VectorX<T> &relief,
+  static submatrix_iterator end(int64_t blockRows, int64_t blockCols,
+                               const std::vector<Eigen::MatrixX<T>> &depths,
+                               const std::vector<Eigen::MatrixX<T>> &velocities,
+                               const Eigen::MatrixX<T> &relief,
                                T z_min, T z_max, T dz, std::optional<T> v_const) {
-    submatrix_iterator it(matrix, blockRows, blockCols,
+    submatrix_iterator it(blockRows, blockCols,
                          depths, velocities, relief,  z_min, z_max, dz, v_const);
     it.m_currentRowBlock = it.m_numRowBlocks;
     it.m_currentColBlock = 0;
