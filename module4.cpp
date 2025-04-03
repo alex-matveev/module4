@@ -63,7 +63,7 @@ template <typename T> std::pair<T, T> two_dots_line(T x1, T y1, T x2, T y2) {
 
 /*! Функция interp_velocity :
  Выполняет линейную интерполяцию скорости по заданным точкам.
- \param[in] - z         : вектор координат
+ \param[in] - z_size        : длина вектора координат
  \param[in] - dep       : вектор глубин (без рельефа);
  \param[in] - vel       : вектор скоростей. Его размер должен быть на 1 больше, чем у dep.
  \param[in] - relief    : значение рельефа (начальный уровень).
@@ -72,11 +72,12 @@ template <typename T> std::pair<T, T> two_dots_line(T x1, T y1, T x2, T y2) {
 */
 template <typename T>
 Eigen::VectorX<T>
-interp_velocity(const Eigen::Ref<const Eigen::VectorX<T>> &z, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
+interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
   const Eigen::Ref<const Eigen::VectorX<T>> &vel, T relief,
                 std::optional<T> v_const = std::nullopt) {
+  
   Eigen::VectorX<T> vel_interp = Eigen::VectorX<T>::Constant(
-      z.size(), v_const.has_value() ? v_const.value() : 0);
+      z_size, v_const.has_value() ? v_const.value() : 0);
 
   if (!std::is_sorted(dep.begin(), dep.end())) {
       throw std::invalid_argument("Вектор глубин должен быть отсортирован по возрастанию");
@@ -98,13 +99,13 @@ interp_velocity(const Eigen::Ref<const Eigen::VectorX<T>> &z, const Eigen::Ref<c
     std::tie(a, b) =
         two_dots_line(dep(i), vel(i+1), dep(i + 1), vel(i + 2));
 
-    // Пока значение z(j) попадает в интервал [dep_full(i), dep_full(i+1)),
+    // Пока значение j попадает в интервал [dep_full(i), dep_full(i+1)),
     // интерполируем
-    while (j < z.size() && j < dep(i + 1)) {
+    while (j < z_size && j < dep(i + 1)) {
         vel_interp(j) =  a * j + b;
       ++j;
     }
-    while (j < z.size()) {
+    while (j < z_size) {
         vel_interp(j) = a * j + b;
         ++j;
     }
@@ -127,7 +128,9 @@ Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &r
 Функция get_cube:
  Формирует «куб» (матрицу) интерполированных скоростей для набора столбцов.
 \return - cube     :матрица, где каждый столбец – это результат интерполяции
-\param[in] - z         : вектор вертикальных координат.
+\param[in] - z_min         : минимальное значение вектора вертикальных координат.
+\param[in] - z_max         : максимальное значение вектора вертикальных координат.
+\param[in] - dz         : шаг сетки.
 \param[in] - depths    : вектор из векторов глубин для каждого столбца.
 \param[in] - velocities: вектор из векторов скоростей для каждого слоя.
 \param[in] - relief    : вектор значений рельефа для каждого столбца.
@@ -136,15 +139,17 @@ Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &r
 
 */
 template <typename T>
-Eigen::MatrixX<T> get_cube(const Eigen::VectorX<T> &z,
+Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
                            const std::vector<Eigen::VectorX<T>> &depths,
                            const std::vector<Eigen::VectorX<T>> &velocities,
                            const Eigen::VectorX<T> &relief,
                            int64_t size, const std::optional<T> &v_const) {
-  Eigen::MatrixX<T> cube(z.size(), size);
+    
+  const T delta = z_max - z_min;
+  const T epsilon = std::numeric_limits<T>::epsilon();
+  const auto z_size = static_cast<int64_t>(std::ceil((delta - epsilon) / dz));
+  Eigen::MatrixX<T> cube(z_size, size);
 
-  T min = z[0];
-  T dz = z[1] - z[0];
 
   for (int64_t i = 0; i < size; ++i) {
 
@@ -164,13 +169,13 @@ Eigen::MatrixX<T> get_cube(const Eigen::VectorX<T> &z,
       dep_vec(j) = depths[j](i);
     }
 
-    dep_vec = (dep_vec.array() - min) / dz;
-    T rel = (relief(i) - min) / dz;
+    dep_vec = (dep_vec.array() - z_min) / dz;
+    T rel = (relief(i) - z_min) / dz;
 
     // Вызываем интерполяцию для текущего столбца и записываем результат в
     // соответствующую колонку матрицы.
     cube.col(i) =
-        interp_velocity<T>(z, dep_vec, vel_vec, rel, v_const);
+        interp_velocity<T>(z_size, dep_vec, vel_vec, rel, v_const);
   }
   return cube;
 }
@@ -211,7 +216,9 @@ private:
     std::vector<Eigen::VectorX<T>> m_depths;    ///< Вектор векторов глубин для каждого столбца.
     std::vector<Eigen::VectorX<T>> m_velocities;  ///< Вектор векторов скоростей (размер = border_num + 1).
     Eigen::VectorX<T> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
-    Eigen::VectorX<T> m_z;                      ///< Вектор вертикальных координат.
+    T m_z_min;///< Вектор вертикальных координат.
+    T m_z_max;///< Вектор вертикальных координат.
+    T m_dz;///< Вектор вертикальных координат.
     std::optional<T> m_v_const;                 ///< Опциональное значение скорости для точек, где z < relief.
 
 public:
@@ -226,7 +233,9 @@ public:
       * \param depths Вектор векторов глубин для каждого столбца.
       * \param velocities Вектор векторов скоростей (ожидается размер border_num + 1).
       * \param relief Вектор значений рельефа для каждого столбца.
-      * \param z Вектор вертикальных координат.
+      * \param z_min Вектор вертикальных координат.
+      * \param z_max Вектор вертикальных координат.
+      * \param dz Вектор вертикальных координат.
       * \param v_const Опциональное постоянное значение скорости для точек, где z < relief.
       * \param currentRowBlock Начальный индекс блока по строкам (по умолчанию 0).
       * \param currentColBlock Начальный индекс блока по столбцам (по умолчанию 0).
@@ -235,11 +244,11 @@ public:
                     const std::vector<Eigen::VectorX<T>> &depths,
                     const std::vector<Eigen::VectorX<T>> &velocities,
                     const Eigen::VectorX<T> &relief,
-                    Eigen::VectorX<T> z, std::optional<T> v_const,
+                    T z_min, T z_max, T dz, std::optional<T> v_const,
                     int64_t currentRowBlock = 0, int64_t currentColBlock = 0)
       : m_matrix(matrix), m_blockRows(blockRows), m_blockCols(blockCols),
         m_depths(depths),
-        m_velocities(velocities), m_relief(relief), m_z(z),
+        m_velocities(velocities), m_relief(relief), m_z_min(z_min), m_z_max(z_max), m_dz(dz),
         m_v_const(v_const), m_currentRowBlock(currentRowBlock),
         m_currentColBlock(currentColBlock) {
     int64_t step_rows = blockRows;
@@ -282,10 +291,9 @@ public:
     }
 
     Eigen::VectorX<T> block_relief = m_relief.segment(start_col, current_block_cols);
-
     // Генерируем куб для текущего блока
     Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
-        m_z, block_depths, block_velocities, block_relief,
+        m_z_min, m_z_max, m_dz,  block_depths, block_velocities, block_relief,
         current_block_cols, m_v_const);
 
     sub_matrix = cube;
@@ -367,7 +375,9 @@ public:
      * \param depths Вектор векторов глубин для каждого столбца.
      * \param velocities Вектор векторов скоростей.
      * \param relief Вектор значений рельефа для каждого столбца.
-     * \param z Вектор вертикальных координат.
+     * \param z_min Минимальное значение вектора вертикальных координат.
+     * \param z_max Максимальное значение вектора вертикальных координат.
+     * \param dz Шаг сетки.
      * \param v_const Опциональное значение скорости.
      * \return Итератор, указывающий на первый блок.
      */
@@ -375,10 +385,10 @@ public:
   begin(rblock<T> &matrix, int64_t blockRows, int64_t blockCols,
         const std::vector<Eigen::VectorX<T>> &depths,
         const std::vector<Eigen::VectorX<T>> &velocities,
-        const Eigen::VectorX<T> &relief, Eigen::VectorX<T> z,
+        const Eigen::VectorX<T> &relief, T m_z_min, T m_z_max, T m_dz,
         std::optional<T> v_const) {
     return submatrix_iterator(matrix, blockRows, blockCols, depths, velocities, relief,
-                              z, v_const);
+                              m_z_min, m_z_max, m_dz, v_const);
   }
   /*!
    * \brief Создает итератор, указывающий на конец последовательности блоков.
@@ -389,7 +399,9 @@ public:
    * \param depths Вектор векторов глубин для каждого столбца.
    * \param velocities Вектор векторов скоростей.
    * \param relief Вектор значений рельефа для каждого столбца.
-   * \param z Вектор вертикальных координат.
+   * \param z_min Минимальное значение вектора вертикальных координат.
+   * \param z_max Максимальное значение вектора вертикальных координат.
+   * \param dz Шаг сетки.
    * \param v_const Опциональное значение скорости.
    * \return Итератор, указывающий на конец последовательности блоков.
    */
@@ -397,9 +409,9 @@ public:
                                const std::vector<Eigen::VectorX<T>> &depths,
                                const std::vector<Eigen::VectorX<T>> &velocities,
                                const Eigen::VectorX<T> &relief,
-                               Eigen::VectorX<T> z, std::optional<T> v_const) {
+                               T z_min, T z_max, T dz, std::optional<T> v_const) {
     submatrix_iterator it(matrix, blockRows, blockCols,
-                         depths, velocities, relief,  z, v_const);
+                         depths, velocities, relief,  z_min, z_max, dz, v_const);
     it.m_currentRowBlock = it.m_numRowBlocks;
     it.m_currentColBlock = 0;
     return it;
