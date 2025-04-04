@@ -42,13 +42,30 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
 
     // Создаем результирующую матрицу (куб) с нулевыми значениями
     rblock<double> result = rblock<double>::Constant(z_size, velocities[0].size(), 9999.0);
-    // Инициализируем итераторы для прохода по блокам
+
+    // Создаем векторы ссылок на матрицы глубин
+        std::vector<Eigen::Ref<const Eigen::MatrixXd>> ref_depths;
+    for (auto& d : depths) {
+        ref_depths.push_back(d);
+    }
+
+    // Создаем векторы ссылок на матрицы скоростей
+    std::vector<Eigen::Ref<const Eigen::MatrixXd>> ref_velocities;
+    for (auto& v : velocities) {
+        ref_velocities.push_back(v);
+    }
+
+    // Создаем ссылку на матрицу рельефа
+    Eigen::Ref<const Eigen::MatrixXd> ref_relief = relief;
+
+    // Создаем итераторы с исправленными типами
     auto begin = submatrix_iterator<double>::begin(
         blockRows, blockCols,
-        depths, velocities, relief, z_min, z_max, dz, v_const);
+        ref_depths, ref_velocities, ref_relief, z_min, z_max, dz, v_const);
+
     auto end = submatrix_iterator<double>::end(
         blockRows, blockCols,
-        depths, velocities, relief, z_min, z_max, dz, v_const);
+        ref_depths, ref_velocities, ref_relief, z_min, z_max, dz, v_const);
 
     // Проходим по всем блокам и заполняем результирующую матрицу
     for (auto it = begin; it != end; ++it) {

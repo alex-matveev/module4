@@ -114,9 +114,9 @@ Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &r
 */
 template <typename T>
 Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
-    const std::vector<Eigen::MatrixX<T>>& depths,
-    const std::vector<Eigen::MatrixX<T>>& velocities,
-    const Eigen::MatrixX<T>& relief,
+    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
+    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
+    const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
     int64_t block_rows, int64_t block_cols,
     const std::optional<T>& v_const) {
     const T delta = z_max - z_min;
@@ -195,9 +195,9 @@ private:
     int64_t m_current_block_rows;  ///< Размер текущего блока по строкам.
     int64_t m_current_block_cols; ///< Размер текущего блока по столбцам.
     // Члены для интерполяции
-    std::vector<Eigen::MatrixX<T>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
-    std::vector<Eigen::MatrixX<T>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
-    Eigen::MatrixX<T> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
+    std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
+    std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
+    Eigen::Ref<const Eigen::MatrixX<T>> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
     T m_z_min;                                    ///< Вектор вертикальных координат.
     T m_z_max;                                    ///< Вектор вертикальных координат.
     T m_dz;                                       ///< Вектор вертикальных координат.
@@ -222,9 +222,9 @@ public:
       * \param currentColBlock Начальный индекс блока по столбцам (по умолчанию 0).
       */
   submatrix_iterator(int64_t blockRows, int64_t blockCols, 
-                    const std::vector<Eigen::MatrixX<T>> &depths,
-                    const std::vector<Eigen::MatrixX<T>> &velocities,
-                    const Eigen::MatrixX<T> &relief,
+                    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
+                    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
+                    const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
                     T z_min, T z_max, T dz, std::optional<T> v_const,
                     int64_t currentRowBlock = 0, int64_t currentColBlock = 0)
       :  m_blockRows(blockRows), m_blockCols(blockCols),
@@ -251,19 +251,20 @@ public:
    * \return Подматрица (тип Eigen::Block<rblock<T>>).
    */
   reference operator*() {
-      
       // Извлекаем блок из каждой матрицы глубин (m_depths)
-      std::vector<Eigen::MatrixX<T>> block_depths;
+      std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> block_depths;
       for (const auto& d : m_depths) {
           block_depths.push_back(d.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols));
       }
+
       // Извлекаем блок из каждой матрицы скоростей (m_velocities)
-      std::vector<Eigen::MatrixX<T>> block_velocities;
+      std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> block_velocities;
       for (const auto& v : m_velocities) {
           block_velocities.push_back(v.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols));
       }
+
       // Извлекаем блок из матрицы рельефа
-      Eigen::MatrixXd block_relief = m_relief.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols);
+      Eigen::Ref<const Eigen::MatrixX<T>> block_relief = m_relief.block(m_start_row, m_start_col, m_current_block_rows, m_current_block_cols);
 
       // Выполняем интерполяцию для выбранного блока
       Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
@@ -364,9 +365,9 @@ public:
      */
   static submatrix_iterator
   begin(int64_t blockRows, int64_t blockCols,
-        const std::vector<Eigen::MatrixX<T>> &depths,
-        const std::vector<Eigen::MatrixX<T>> &velocities,
-        const Eigen::MatrixX<T> &relief, T m_z_min, T m_z_max, T m_dz,
+        const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
+        const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
+        const Eigen::Ref<const Eigen::MatrixX<T>>&relief, T m_z_min, T m_z_max, T m_dz,
         std::optional<T> v_const) {
     return submatrix_iterator( blockRows, blockCols, depths, velocities, relief,
                               m_z_min, m_z_max, m_dz, v_const);
@@ -386,10 +387,10 @@ public:
    * \return Итератор, указывающий на конец последовательности блоков.
    */
   static submatrix_iterator end(int64_t blockRows, int64_t blockCols,
-                               const std::vector<Eigen::MatrixX<T>> &depths,
-                               const std::vector<Eigen::MatrixX<T>> &velocities,
-                               const Eigen::MatrixX<T> &relief,
-                               T z_min, T z_max, T dz, std::optional<T> v_const) {
+                                const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
+                                const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
+                                const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
+                                  T z_min, T z_max, T dz, std::optional<T> v_const) {
     submatrix_iterator it(blockRows, blockCols,
                          depths, velocities, relief,  z_min, z_max, dz, v_const);
     it.m_currentRowBlock = it.m_numRowBlocks;
