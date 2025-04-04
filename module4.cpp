@@ -153,9 +153,7 @@ Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
             // Функция interp_velocity должна вернуть вектор длины z_size,
             // представляющий распределение интерполированных значений по оси z.
             cube.col(idx) = interp_velocity<T>(z_size, dep_vec, vel_vec, rel_val, v_const);
-           // std::cout << "dep_vec" << dep_vec << std::endl;
-            //std::cout << "vel_vec" << vel_vec << std::endl;
-            //std::cout << "cube" << cube << std::endl;
+           
         }
     }
     return cube;
@@ -192,10 +190,10 @@ private:
     int64_t m_currentRowBlock;    ///< Индекс текущего блока по строкам.
     int64_t m_currentColBlock;    ///< Индекс текущего блока по столбцам.
 
-    int64_t m_start_row = 0;
-    int64_t m_start_col = 0;
-    int64_t m_current_block_rows;
-    int64_t m_current_block_cols;
+    int64_t m_start_row = 0;  ///< Индекс начала текущего блока по столбцам.
+    int64_t m_start_col = 0; ///< Индекс начала текущего блока по столбцам.
+    int64_t m_current_block_rows;  ///< Размер текущего блока по строкам.
+    int64_t m_current_block_cols; ///< Размер текущего блока по столбцам.
     // Члены для интерполяции
     std::vector<Eigen::MatrixX<T>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
     std::vector<Eigen::MatrixX<T>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
@@ -211,7 +209,6 @@ public:
       *
       * Инициализирует итератор, вычисляя количество блоков по строкам и столбцам.
       *
-
       * \param blockRows Размер блока по строкам.
       * \param blockCols Размер блока по столбцам.
       * \param depths Вектор векторов глубин для каждого столбца.
@@ -251,13 +248,9 @@ public:
    *
    * Оператор разыменования возвращает ссылку на подматрицу, сформированную из
    * сегментов исходной матрицы и заполненную интерполированными значениями
-   * \return Ссылка на подматрицу (тип Eigen::Block<rblock<T>>).
+   * \return Подматрица (тип Eigen::Block<rblock<T>>).
    */
   reference operator*() {
-      
-      // Получаем блок исходной матрицы для заполнения
-      //auto block = m_matrix.block(start_row, start_col, current_block_rows, current_block_cols);
-
       
       // Извлекаем блок из каждой матрицы глубин (m_depths)
       std::vector<Eigen::MatrixX<T>> block_depths;
@@ -276,10 +269,6 @@ public:
       Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
           m_z_min, m_z_max, m_dz, block_depths, block_velocities, block_relief,
           m_current_block_rows, m_current_block_cols, m_v_const);
-      // Присваиваем результат интерполяции блоку исходной матрицы
-     // block = cube;
-      
-      
 
       return cube;
   }
@@ -302,12 +291,12 @@ public:
       m_currentColBlock = 0;
       m_currentRowBlock++;
     }
-     m_start_row = m_currentRowBlock * m_blockRows;
-     m_start_col = m_currentColBlock * m_blockCols;
-     m_current_block_rows = (m_currentRowBlock == m_numRowBlocks - 1)
+     m_start_row = m_currentRowBlock * m_blockRows; //индекс строки
+     m_start_col = m_currentColBlock * m_blockCols; // индекс столбца
+     m_current_block_rows = (m_currentRowBlock == m_numRowBlocks - 1) //размер блока по строкам
         ? (m_relief.rows() - m_start_row)
         : m_blockRows;
-     m_current_block_cols = (m_currentColBlock == m_numColBlocks - 1)
+     m_current_block_cols = (m_currentColBlock == m_numColBlocks - 1) // размер блока по столбцам
         ? (m_relief.cols() - m_start_col)
         : m_blockCols;
     return *this;
@@ -366,7 +355,7 @@ public:
      * \param blockCols Размер блока по столбцам.
      * \param depths Вектор векторов глубин для каждого столбца.
      * \param velocities Вектор векторов скоростей.
-     * \param relief Вектор значений рельефа для каждого столбца.
+     * \param relief Матрица значений рельефа для каждого столбца.
      * \param z_min Минимальное значение вектора вертикальных координат.
      * \param z_max Максимальное значение вектора вертикальных координат.
      * \param dz Шаг сетки.

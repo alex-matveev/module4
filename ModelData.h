@@ -100,61 +100,10 @@ Eigen::MatrixXd convertToEigenMatrix2D(const std::vector<std::vector<double>>& m
     return eigenMat;
 }
 
-// Функция для "сжатия" 3D-матрицы в вектор 2D-матриц
-std::vector<std::vector<double>>
-flatten3D(const std::vector<std::vector<std::vector<double>>>& depth) {
-    std::vector<std::vector<double>> flattened;
-    flattened.reserve(depth.size());
-
-    for (const auto& matrix : depth) {
-        std::vector<double> flat;
-        for (const auto& row : matrix) {
-            flat.insert(flat.end(), row.begin(), row.end());
-        }
-        flattened.push_back(std::move(flat));
-    }
-    return flattened;
-}
-
-// Функция для "сжатия" 2D-матрицы в вектор Eigen::VectorXd
-Eigen::VectorXd flatten2D(const std::vector<std::vector<double>>& matrix) {
-    size_t total_elements = 0;
-    for (const auto& row : matrix) {
-        total_elements += row.size();
-    }
-
-    Eigen::VectorXd flat(total_elements);
-    size_t index = 0;
-    for (const auto& row : matrix) {
-        for (const auto& element : row) {
-            flat(index++) = element;
-        }
-    }
-    return flat;
-}
 
 // Используемые typedef'ы для удобства
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
-
-// Функция сохранения матрицы в файл в бинарном формате
-void saveMatrix(const Eigen::MatrixXd& cube, const std::string& filename) {
-    std::ofstream out(filename, std::ios::binary);
-    if (!out) {
-        std::cerr << "Не удалось открыть файл для записи" << std::endl;
-        return;
-    }
-
-    int32_t rows = static_cast<int32_t>(cube.rows());
-    int32_t cols = static_cast<int32_t>(cube.cols());
-    out.write(reinterpret_cast<const char*>(&rows), sizeof(rows));
-    out.write(reinterpret_cast<const char*>(&cols), sizeof(cols));
-
-    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-        cube_rowmajor = cube;
-    out.write(reinterpret_cast<const char*>(cube_rowmajor.data()),
-        rows * cols * sizeof(double));
-}
 
 // Определяем alias для матрицы в формате RowMajor
 template <typename T>
@@ -197,15 +146,4 @@ rblock<double> loadRBlockMatrix(const std::string& filename) {
     rblock<double> mat(rows, cols);
     in.read(reinterpret_cast<char*>(mat.data()), rows * cols * sizeof(double));
     return mat;
-}
-
-// Преобразование std::vector<std::vector<double>> в std::vector<Eigen::VectorXd>
-std::vector<VectorXd>
-convertToEigen(const std::vector<std::vector<double>>& input) {
-    std::vector<VectorXd> depths;
-    depths.reserve(input.size());
-    for (const auto& vec : input) {
-        depths.push_back(Eigen::Map<const VectorXd>(vec.data(), vec.size()));
-    }
-    return depths;
 }
