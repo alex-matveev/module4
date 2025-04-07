@@ -51,7 +51,7 @@ interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
                 std::optional<T> v_const = std::nullopt) {
   
   Eigen::VectorX<T> vel_interp = Eigen::VectorX<T>::Constant(
-      z_size, v_const.has_value() ? v_const.value() : 0);
+      z_size, v_const.has_value() ? v_const.value() : vel[0]);
 
   if (!std::is_sorted(dep.begin(), dep.end())) {
       throw std::invalid_argument("Вектор глубин должен быть отсортирован по возрастанию");
@@ -119,43 +119,43 @@ Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
     const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
     int64_t block_rows, int64_t block_cols,
     const std::optional<T>& v_const) {
+    // Вычисление числа элементов по оси z
     const T delta = z_max - z_min;
     const T epsilon = std::numeric_limits<T>::epsilon();
     const int64_t z_size = static_cast<int64_t>(std::ceil((delta - epsilon) / dz));
 
+    // Количество пикселей
     const int64_t num_pixels = block_rows * block_cols;
-    Eigen::MatrixX<T> cube(z_size, num_pixels);
 
-    // Число глубинных срезов определяется размером вектора depths
+    // Создание матрицы с размерами num_pixels x z_size
+    Eigen::MatrixX<T> cube(num_pixels, z_size);
+
     const int64_t num_depth_slices = depths.size();
 
-    // Проходим по всем пикселям блока (индексируем в порядке row-major)
+    // Цикл по пикселям
     for (int64_t r = 0; r < block_rows; ++r) {
         for (int64_t c = 0; c < block_cols; ++c) {
             int64_t idx = r * block_cols + c;
 
-            // Собираем векторы значений глубины и скорости для текущего пикселя из всех срезов
+            // Формирование векторов глубин и скоростей
             Eigen::VectorX<T> dep_vec(num_depth_slices);
             Eigen::VectorX<T> vel_vec(num_depth_slices + 1);
             for (int64_t d = 0; d < num_depth_slices; ++d) {
-                // Из каждого среза выбираем значение в координатах (r, c)
                 dep_vec(d) = depths[d](r, c);
             }
-            for (int64_t d = 0; d < num_depth_slices+1; ++d) {
-                // Из каждого среза выбираем значение в координатах (r, c)
+            for (int64_t d = 0; d < num_depth_slices + 1; ++d) {
                 vel_vec(d) = velocities[d](r, c);
             }
-            // Нормализуем значения глубины относительно z_min и dz
+
+            // Нормализация
             dep_vec = (dep_vec.array() - z_min) / dz;
             T rel_val = (relief(r, c) - z_min) / dz;
 
-            // Интерполируем для данного пикселя.
-            // Функция interp_velocity должна вернуть вектор длины z_size,
-            // представляющий распределение интерполированных значений по оси z.
-            cube.col(idx) = interp_velocity<T>(z_size, dep_vec, vel_vec, rel_val, v_const);
-           
+            // Заполнение строки матрицы развернутым вектором интерполированных значений
+            cube.row(idx) = interp_velocity<T>(z_size, dep_vec, vel_vec, rel_val, v_const).reverse();
         }
     }
+
     return cube;
 }
 

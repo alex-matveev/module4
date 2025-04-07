@@ -41,8 +41,8 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
  
 
     // Создаем результирующую матрицу (куб) с нулевыми значениями
-    rblock<double> result = rblock<double>::Constant(z_size, velocities[0].size(), 9999.0);
-
+    //rblock<double> result = rblock<double>::Constant(z_size, velocities[0].size(), 0);
+    rblock<double> result = rblock<double>::Constant(velocities[0].size(), z_size, 0);
     // Создаем векторы ссылок на матрицы глубин
         std::vector<Eigen::Ref<const Eigen::MatrixXd>> ref_depths;
     for (auto& d : depths) {
@@ -80,7 +80,7 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
                 int global_row = startRow + i;
                 int global_col = startCol + j;
                 int global_index = global_row * total_cols + global_col;
-                result.col(global_index) = block.col(i * std::get<1>(it.shape()) + j);
+                result.row(global_index) = block.row(i * std::get<1>(it.shape()) + j);
             }
         }
    

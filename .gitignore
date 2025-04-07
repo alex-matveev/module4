@@ -4,3 +4,5 @@ build/
 /.vs/module4-git/v17
 /.vs
 /CMakeSettings.json
+/html
+/latex
