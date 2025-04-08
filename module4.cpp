@@ -35,15 +35,15 @@ template <typename T> std::pair<T, T> two_dots_line(T x1, T y1, T x2, T y2) {
   return {a, b};
 }
 
-/*! Функция interp_velocity :
- \brief Выполняет линейную интерполяцию скорости по заданным точкам.
- \param[in] - z_size        : длина вектора координат
- \param[in] - dep       : вектор глубин (без рельефа);
- \param[in] - vel       : вектор скоростей. Его размер должен быть на 1 больше, чем у dep.
- \param[in] - relief    : значение рельефа (начальный уровень).
- \param[in] - v_const   : опциональное постоянное значение скорости для точек, где z < relief.
- \return - vel_interp : вектор интерполированных скоростей.
-*/
+/*!
+ * \brief Выполняет линейную интерполяцию скорости по заданным точкам.
+ * \param[in] z_size Длина вектора координат.
+ * \param[in] dep Вектор глубин (без рельефа), должен быть отсортирован по возрастанию.
+ * \param[in] vel Вектор скоростей. Размер должен быть на 1 больше, чем у dep.
+ * \param[in] relief Значение рельефа (начальный уровень).
+ * \param[in] v_const Опциональное постоянное значение скорости для точек, где z < relief.
+ * \return Вектор интерполированных скоростей.
+ */
 template <typename T>
 Eigen::VectorX<T>
 interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
@@ -88,30 +88,29 @@ interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
   return vel_interp;
 }
 
-/*! Функция get_static_relief :
-// Округляет значения рельефа до ближайшего кратного dz.
-\return - static_relief     :
-\param[in] - relief         : вектор значений рельефа для каждого столбца.
-
-*/
+/*!
+ * \brief Округляет значения рельефа до ближайшего кратного dz.
+ * \param[in] relief Вектор значений рельефа для каждого столбца.
+ * \param[in] dz Шаг округления.
+ * \return static_relief.
+ */
 template <typename T>
 Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &relief, T dz) {
   return ((relief.array() / dz).round()) * dz;
 }
 /*!
-Функция get_cube:
- Формирует «куб» (матрицу) интерполированных скоростей для набора столбцов.
-\return - cube     :матрица, где каждая строка – это результат интерполяции
-\param[in] - z_min         : минимальное значение вектора вертикальных координат.
-\param[in] - z_max         : максимальное значение вектора вертикальных координат.
-\param[in] - dz         : шаг сетки.
-\param[in] - depths    : вектор из векторов глубин для каждого столбца.
-\param[in] - velocities: вектор из векторов скоростей для каждого слоя.
-\param[in] - relief    : вектор значений рельефа для каждого столбца.
-\param[in] - size      : число столбцов (размер куба по второй оси).
-\param[in] - v_const   : опциональное постоянное значение скорости для точек, где z < relief.
-
-*/
+ * \brief Формирует матрицу интерполированных скоростей для набора столбцов.
+ * \param[in] z_min Минимальное значение вертикальной координаты.
+ * \param[in] z_max Максимальное значение вертикальной координаты.
+ * \param[in] dz Шаг сетки.
+ * \param[in] depths Вектор матриц глубин для каждого слоя.
+ * \param[in] velocities Вектор матриц скоростей для каждого слоя (размер = depths.size() + 1).
+ * \param[in] relief Матрица значений рельефа.
+ * \param[in] block_rows Количество строк в блоке.
+ * \param[in] block_cols Количество столбцов в блоке.
+ * \param[in] v_const Опциональное значение скорости для точек ниже рельефа.
+ * \return Матрица, где каждая строка соответствует интерполированным скоростям для одного столбца.
+ */
 template <typename T>
 Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
@@ -164,6 +163,7 @@ Eigen::MatrixX<T> get_cube(T z_min, T z_max, T dz,
 template <class T>
 using rblock =
     Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+
 /*!
  * \brief Итератор по подматрицам для интерполяции.
  *
@@ -198,29 +198,25 @@ private:
     std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
     std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
     Eigen::Ref<const Eigen::MatrixX<T>> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
-    T m_z_min;                                    ///< Вектор вертикальных координат.
-    T m_z_max;                                    ///< Вектор вертикальных координат.
-    T m_dz;                                       ///< Вектор вертикальных координат.
+    T m_z_min;                                    ///< Минимальное значение вектора вертикальных координат.
+    T m_z_max;                                    ///< Максимальное значение вектора вертикальных координат.
+    T m_dz;                                       ///< Шаг сетки.
     std::optional<T> m_v_const;                   ///< Опциональное значение скорости для точек, где z < relief.
 
 public:
-    /*!
-      * \brief Конструктор итератора.
-      *
-      * Инициализирует итератор, вычисляя количество блоков по строкам и столбцам.
-      *
-      * \param blockRows Размер блока по строкам.
-      * \param blockCols Размер блока по столбцам.
-      * \param depths Вектор векторов глубин для каждого столбца.
-      * \param velocities Вектор векторов скоростей (ожидается размер border_num + 1).
-      * \param relief Вектор значений рельефа для каждого столбца.
-      * \param z_min Вектор вертикальных координат.
-      * \param z_max Вектор вертикальных координат.
-      * \param dz Вектор вертикальных координат.
-      * \param v_const Опциональное постоянное значение скорости для точек, где z < relief.
-      * \param currentRowBlock Начальный индекс блока по строкам (по умолчанию 0).
-      * \param currentColBlock Начальный индекс блока по столбцам (по умолчанию 0).
-      */
+ /*!
+ * \param[in] blockRows Количество строк в блоке.
+ * \param[in] blockCols Количество столбцов в блоке.
+ * \param[in] depths Вектор матриц глубин для каждого слоя.
+ * \param[in] velocities Вектор матриц скоростей для каждого слоя.
+ * \param[in] relief Матрица рельефа.
+ * \param[in] z_min Минимальная вертикальная координата.
+ * \param[in] z_max Максимальная вертикальная координата.
+ * \param[in] dz Шаг сетки.
+ * \param[in] v_const Опциональное значение скорости для точек, где z < relief.
+ * \param[in] currentRowBlock Начальный индекс блока по строкам (по умолчанию 0).
+ * \param[in] currentColBlock Начальный индекс блока по столбцам (по умолчанию 0).
+ */
   submatrix_iterator(int64_t blockRows, int64_t blockCols, 
                     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
                     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
@@ -232,8 +228,8 @@ public:
         m_velocities(velocities), m_relief(relief), m_z_min(z_min), m_z_max(z_max), m_dz(dz),
         m_v_const(v_const), m_currentRowBlock(currentRowBlock),
         m_currentColBlock(currentColBlock) {
-      m_current_block_rows = relief.rows() < blockRows ? relief.rows() : blockRows;
-      m_current_block_cols = relief.cols() < blockCols ? relief.cols() : blockCols;
+        m_current_block_rows = relief.rows() < blockRows ? relief.rows() : blockRows;
+        m_current_block_cols = relief.cols() < blockCols ? relief.cols() : blockCols;
     int64_t step_rows = blockRows;
     int64_t total_effective_rows = relief.rows();
     m_numRowBlocks = (total_effective_rows + step_rows - 1) / step_rows;
@@ -244,11 +240,8 @@ public:
   }
 
   /*!
-   * \brief Возвращает текущую подматрицу для интерполяции.
-   *
-   * Оператор разыменования возвращает куб, заполненный интерполированными значениями, для выбранного блока исходной матрицы
-   * \return Подматрица (тип Eigen::Block<rblock<T>>).
-   */
+ * \return Куб (матрица) интерполированных скоростей для текущего блока.
+ */
   reference operator*() {
       // Извлекаем блок из каждой матрицы глубин (m_depths)
       std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> block_depths;
@@ -349,19 +342,18 @@ public:
    */
   std::pair<int64_t, int64_t> shape() { return { m_current_block_rows , m_current_block_cols }; }
   /*!
-     * \brief Создает итератор, указывающий на начало последовательности блоков.
-     *
-     * \param blockRows Размер блока по строкам.
-     * \param blockCols Размер блока по столбцам.
-     * \param depths Вектор векторов глубин для каждого столбца.
-     * \param velocities Вектор векторов скоростей.
-     * \param relief Матрица значений рельефа для каждого столбца.
-     * \param z_min Минимальное значение вектора вертикальных координат.
-     * \param z_max Максимальное значение вектора вертикальных координат.
-     * \param dz Шаг сетки.
-     * \param v_const Опциональное значение скорости.
-     * \return Итератор, указывающий на первый блок.
-     */
+  * \brief Создает итератор, указывающий на начало последовательности блоков.
+  * \param[in] blockRows Количество строк в блоке.
+  * \param[in] blockCols Количество столбцов в блоке.
+  * \param[in] depths Вектор матриц глубин для каждого слоя.
+  * \param[in] velocities Вектор матриц скоростей для каждого слоя.
+  * \param[in] relief Матрица рельефа.
+  * \param[in] z_min Минимальная вертикальная координата.
+  * \param[in] z_max Максимальная вертикальная координата.
+  * \param[in] dz Шаг сетки.
+  * \param[in] v_const Опциональное значение скорости для точек, где z < relief.
+  * \return Итератор на начало последовательности блоков.
+  */
   static submatrix_iterator
   begin(int64_t blockRows, int64_t blockCols,
         const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
@@ -374,16 +366,16 @@ public:
   /*!
    * \brief Создает итератор, указывающий на конец последовательности блоков.
    *
-   * \param blockRows Размер блока по строкам.
-   * \param blockCols Размер блока по столбцам.
-   * \param depths Вектор векторов глубин для каждого столбца.
-   * \param velocities Вектор векторов скоростей.
-   * \param relief Вектор значений рельефа для каждого столбца.
-   * \param z_min Минимальное значение вектора вертикальных координат.
-   * \param z_max Максимальное значение вектора вертикальных координат.
-   * \param dz Шаг сетки.
-   * \param v_const Опциональное значение скорости.
-   * \return Итератор, указывающий на конец последовательности блоков.
+   * \param[in] blockRows Количество строк в блоке.
+   * \param[in] blockCols Количество столбцов в блоке.
+   * \param[in] depths Вектор матриц глубин для каждого слоя.
+   * \param[in] velocities Вектор матриц скоростей для каждого слоя.
+   * \param[in] relief Матрица рельефа.
+   * \param[in] z_min Минимальная вертикальная координата.
+   * \param[in] z_max Максимальная вертикальная координата.
+   * \param[in] dz Шаг сетки.
+   * \param[in] v_const Опциональное значение скорости для точек, где z < relief.
+   * \return Итератор на конец последовательности блоков.
    */
   static submatrix_iterator end(int64_t blockRows, int64_t blockCols,
                                 const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
