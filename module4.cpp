@@ -165,6 +165,83 @@ using rblock =
     Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 /*!
+ * \brief Проверяет корректность входных данных для генератора.
+ *
+ * Функция выполняет серию проверок для обеспечения того, что все входные параметры
+ * соответствуют ожидаемым требованиям. Если какой-либо параметр не проходит проверку,
+ * выбрасывается исключение \c std::invalid_argument с описанием ошибки.
+ *
+ * \tparam T Тип элементов матриц (например, double, float).
+ *
+ * \param[in] blockRows Размер блока по строкам. Должен быть положительным целым числом.
+ * \param[in] blockCols Размер блока по столбцам. Должен быть положительным целым числом.
+ * \param[in] depths Вектор матриц глубин для каждого слоя. Не должен быть пустым, и все матрицы должны иметь одинаковые размеры.
+ * \param[in] velocities Вектор матриц скоростей. Размер должен быть на единицу больше, чем у \a depths, и все матрицы должны иметь одинаковые размеры с \a depths.
+ * \param[in] relief Матрица значений рельефа. Размеры должны совпадать с размерами матриц в \a depths.
+ * \param[in] z_min Минимальное значение вертикальных координат. Должно быть меньше \a z_max.
+ * \param[in] z_max Максимальное значение вертикальных координат. Должно быть больше \a z_min.
+ * \param[in] dz Шаг сетки по вертикали. Должен быть положительным числом.
+ * \param[in] v_const Опциональное постоянное значение скорости. Если задано, должно быть конечным числом.
+ *
+ * \throws std::invalid_argument Если какой-либо из параметров не соответствует требованиям.
+ */
+template <class T>
+void validate_input_data(
+    int64_t blockRows, int64_t blockCols,
+    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
+    const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
+    const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
+    T z_min, T z_max, T dz,
+    std::optional<T> v_const) {
+
+    // Проверка blockRows и blockCols
+    if (blockRows <= 0 || blockCols <= 0) {
+        throw std::invalid_argument("blockRows и blockCols должны быть положительными целыми числами.");
+    }
+
+    // Проверка, что depths не пуст
+    if (depths.empty()) {
+        throw std::invalid_argument("Вектор depths не может быть пустым.");
+    }
+
+    // Проверка размеров матриц в depths
+    auto rows = depths[0].rows();
+    auto cols = depths[0].cols();
+    for (const auto& d : depths) {
+        if (d.rows() != rows || d.cols() != cols) {
+            throw std::invalid_argument("Все матрицы в depths должны иметь одинаковые размеры.");
+        }
+    }
+
+    // Проверка размеров матриц в velocities
+    if (velocities.size() != depths.size() + 1) {
+        throw std::invalid_argument("Размер velocities должен быть равен depths.size() + 1.");
+    }
+    for (const auto& v : velocities) {
+        if (v.rows() != rows || v.cols() != cols) {
+            throw std::invalid_argument("Все матрицы в velocities должны иметь одинаковые размеры с depths.");
+        }
+    }
+
+    // Проверка размера relief
+    if (relief.rows() != rows || relief.cols() != cols) {
+        throw std::invalid_argument("Размер relief должен совпадать с размерами матриц в depths.");
+    }
+
+    // Проверка z_min, z_max, dz
+    if (z_min >= z_max) {
+        throw std::invalid_argument("z_min должен быть меньше z_max.");
+    }
+    if (dz <= 0) {
+        throw std::invalid_argument("dz должен быть положительным числом.");
+    }
+
+    // Проверка v_const, если присутствует
+    if (v_const.has_value() && !std::isfinite(v_const.value())) {
+        throw std::invalid_argument("v_const должен быть конечным числом.");
+    }
+}
+/*!
  * \brief Итератор по подматрицам для интерполяции.
  *
  * Класс реализует forward-итератор, который позволяет последовательно
@@ -230,6 +307,8 @@ public:
         m_currentColBlock(currentColBlock) {
         m_current_block_rows = relief.rows() < blockRows ? relief.rows() : blockRows;
         m_current_block_cols = relief.cols() < blockCols ? relief.cols() : blockCols;
+    // Выполняем валидацию входных данных
+    validate_input_data(blockRows, blockCols, depths, velocities, relief, z_min, z_max, dz, v_const);
     int64_t step_rows = blockRows;
     int64_t total_effective_rows = relief.rows();
     m_numRowBlocks = (total_effective_rows + step_rows - 1) / step_rows;
