@@ -90,13 +90,13 @@ interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
 
 /*!
  * \brief Округляет значения рельефа до ближайшего кратного dz.
- * \param[in] relief Вектор значений рельефа для каждого столбца.
+ * \param[in] relief Матрица значений рельефа.
  * \param[in] dz Шаг округления.
- * \return static_relief.
+ * \return Матрица округленных значений рельефа.
  */
 template <typename T>
-Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::VectorX<T>> &relief, T dz) {
-  return ((relief.array() / dz).round()) * dz;
+Eigen::MatrixX<T> get_static_relief(const Eigen::Ref<const Eigen::MatrixX<T>>& relief, T dz) {
+    return ((relief.array() / dz).round() * dz).matrix();
 }
 /*!
  * \brief Формирует матрицу интерполированных скоростей для набора столбцов.
