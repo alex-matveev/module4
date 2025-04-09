@@ -92,11 +92,12 @@ interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
  * \brief Округляет значения рельефа до ближайшего кратного dz.
  * \param[in] relief Матрица значений рельефа.
  * \param[in] dz Шаг округления.
- * \return Матрица округленных значений рельефа.
+ * \return Вектор округленных значений рельефа.
  */
 template <typename T>
 Eigen::MatrixX<T> get_static_relief(const Eigen::Ref<const Eigen::MatrixX<T>>& relief, T dz) {
-    return ((relief.array() / dz).round() * dz).matrix();
+    Eigen::VectorX<T> flat_relief = Eigen::Map<const Eigen::VectorX<T>>(relief.data(), relief.size());
+    return ((flat_relief.array() / dz).round() * dz).matrix();
 }
 /*!
  * \brief Формирует матрицу интерполированных скоростей для набора столбцов.
@@ -279,6 +280,7 @@ private:
     T m_z_max;                                    ///< Максимальное значение вектора вертикальных координат.
     T m_dz;                                       ///< Шаг сетки.
     std::optional<T> m_v_const;                   ///< Опциональное значение скорости для точек, где z < relief.
+    Eigen::VectorX<T> m_static_relief;  ///< Округленный рельеф (вектор)
 
 public:
  /*!
@@ -304,7 +306,8 @@ public:
         m_depths(depths),
         m_velocities(velocities), m_relief(relief), m_z_min(z_min), m_z_max(z_max), m_dz(dz),
         m_v_const(v_const), m_currentRowBlock(currentRowBlock),
-        m_currentColBlock(currentColBlock) {
+        m_currentColBlock(currentColBlock),
+        m_static_relief(layer_2_grid::get_static_relief(relief, dz)) {
         m_current_block_rows = relief.rows() < blockRows ? relief.rows() : blockRows;
         m_current_block_cols = relief.cols() < blockCols ? relief.cols() : blockCols;
     // Выполняем валидацию входных данных
@@ -317,7 +320,14 @@ public:
     int64_t total_effective_cols = relief.cols();
     m_numColBlocks = (total_effective_cols + step_cols - 1) / step_cols;
   }
-
+  /*!
+ * \brief Возвращает округленный рельеф, вычисленный на основе матрицы рельефа и шага сетки.
+ * \return Константная ссылка на вектор округленных значений рельефа (Eigen::VectorX<T>).
+ */
+  const Eigen::VectorX<T>& get_static_relief() const {
+      return m_static_relief;
+  }
+ 
   /*!
  * \return Куб (матрица) интерполированных скоростей для текущего блока.
  */
