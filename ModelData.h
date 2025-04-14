@@ -88,10 +88,11 @@ std::vector<Eigen::MatrixXd> convertToEigenMatrix(
     return matrices;
 }
 // Преобразование 2D-вектора в матрицу Eigen::MatrixXd
-Eigen::MatrixXd convertToEigenMatrix2D(const std::vector<std::vector<double>>& mat) {
+Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+convertToEigenMatrix2D(const std::vector<std::vector<double>>& mat) {
     int rows = static_cast<int>(mat.size());
     int cols = (rows > 0 ? static_cast<int>(mat[0].size()) : 0);
-    Eigen::MatrixXd eigenMat(rows, cols);
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> eigenMat(rows, cols);
     for (int i = 0; i < rows; ++i) {
         for (int j = 0; j < cols; ++j) {
             eigenMat(i, j) = mat[i][j];
@@ -99,7 +100,6 @@ Eigen::MatrixXd convertToEigenMatrix2D(const std::vector<std::vector<double>>& m
     }
     return eigenMat;
 }
-
 
 // Используемые typedef'ы для удобства
 using Eigen::MatrixXd;

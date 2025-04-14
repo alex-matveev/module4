@@ -33,7 +33,7 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
 
     std::vector<Eigen::MatrixXd> depths = convertToEigenMatrix(data.depth);
     std::vector<Eigen::MatrixXd> velocities = convertToEigenMatrix(data.velocity);
-    Eigen::MatrixXd relief = convertToEigenMatrix2D(data.relief);
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> relief = convertToEigenMatrix2D(data.relief);
 
     // После загрузки данных
     ASSERT_FALSE(depths.empty()) << "Failed to load depths";
@@ -58,7 +58,7 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
     // Создаем ссылку на матрицу рельефа
     Eigen::Ref<const Eigen::MatrixXd> ref_relief = relief;
 
-    // Создаем итераторы с исправленными типами
+    // Создаем итераторы 
     auto begin = submatrix_iterator<double>::begin(
         blockRows, blockCols,
         ref_depths, ref_velocities, ref_relief, z_min, z_max, dz, v_const);
@@ -69,7 +69,7 @@ TEST(Module4Test, CubeInterpolationMatchesExpectedResultFromFiles) {
 
     // Проходим по всем блокам и заполняем результирующую матрицу
     for (auto it = begin; it != end; ++it) {
-        auto block = *it;
+        auto [block, relief_vector] = *it;
 
         // Вычисляем координаты текущего блока в полной матрице
         int startRow = it.index().first;

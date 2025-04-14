@@ -95,9 +95,9 @@ interp_velocity(T z_size, const Eigen::Ref<const Eigen::VectorX<T>> &dep,
  * \return Вектор округленных значений рельефа.
  */
 template <typename T>
-Eigen::MatrixX<T> get_static_relief(const Eigen::Ref<const Eigen::MatrixX<T>>& relief, T dz) {
-    Eigen::VectorX<T> flat_relief = Eigen::Map<const Eigen::VectorX<T>>(relief.data(), relief.size());
-    return ((flat_relief.array() / dz).round() * dz).matrix();
+Eigen::VectorX<T> get_static_relief(const Eigen::Ref<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& relief, T dz) {
+    Eigen::VectorXd flat_relief = Eigen::Map<const Eigen::VectorXd>(relief.data(), relief.size());
+    return ((flat_relief.array() / dz).round() * dz);
 }
 /*!
  * \brief Формирует матрицу интерполированных скоростей для набора столбцов.
@@ -191,7 +191,7 @@ void validate_input_data(
     int64_t blockRows, int64_t blockCols,
     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
-    const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
+    const Eigen::Ref<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& relief,
     T z_min, T z_max, T dz,
     std::optional<T> v_const) {
 
@@ -275,7 +275,7 @@ private:
     // Члены для интерполяции
     std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_depths;      ///< Вектор матриц глубин для каждого столбца.
     std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> m_velocities;  ///< Вектор матриц скоростей (размер = border_num + 1).
-    Eigen::Ref<const Eigen::MatrixX<T>> m_relief;                   ///< Вектор значений рельефа для каждого столбца.
+    Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> m_relief;///<  Матрица значений рельефа.
     T m_z_min;                                    ///< Минимальное значение вектора вертикальных координат.
     T m_z_max;                                    ///< Максимальное значение вектора вертикальных координат.
     T m_dz;                                       ///< Шаг сетки.
@@ -299,7 +299,7 @@ public:
   submatrix_iterator(int64_t blockRows, int64_t blockCols, 
                     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
                     const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
-                    const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
+                    const Eigen::Ref<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& relief,
                     T z_min, T z_max, T dz, std::optional<T> v_const,
                     int64_t currentRowBlock = 0, int64_t currentColBlock = 0)
       :  m_blockRows(blockRows), m_blockCols(blockCols),
@@ -329,9 +329,10 @@ public:
   }
  
   /*!
- * \return Куб (матрица) интерполированных скоростей для текущего блока.
- */
-  reference operator*() {
+   * \brief Возвращает подкуб скоростей (Eigen::MatrixX<T>) и соответствующий ему округленный рельеф (Eigen::VectorX<T>) для текущего блока.
+   * \return Пара (подкуб, округленный рельеф текущего блока).
+   */
+  std::pair<Eigen::MatrixX<T>, Eigen::VectorX<T>> operator*() {
       // Извлекаем блок из каждой матрицы глубин (m_depths)
       std::vector<Eigen::Ref<const Eigen::MatrixX<T>>> block_depths;
       for (const auto& d : m_depths) {
@@ -351,8 +352,25 @@ public:
       Eigen::MatrixX<T> cube = layer_2_grid::get_cube(
           m_z_min, m_z_max, m_dz, block_depths, block_velocities, block_relief,
           m_current_block_rows, m_current_block_cols, m_v_const);
+      //Далее вычисление рельефа для текущего блока
+      // Размеры полной матрицы рельефа
+      int64_t total_cols = m_relief.cols();
+      // Начальный индекс блока в плоском векторе
+      int64_t start_index = m_start_row * total_cols + m_start_col;
+      // Размер блока
+      int64_t block_size = m_current_block_rows * m_current_block_cols;
+      // Создание вектора для округленного рельефа блока
+      Eigen::VectorX<T> current_static_relief(block_size);
 
-      return cube;
+      // Извлечение данных построчно
+      for (int64_t i = 0; i < m_current_block_rows; ++i) {
+          int64_t row_start = start_index + i * total_cols;
+          current_static_relief.segment(i * m_current_block_cols, m_current_block_cols) =
+              m_static_relief.segment(row_start, m_current_block_cols);
+      }
+
+      // Возврат пары: подкуб и вектор округленного рельефа
+      return { cube, current_static_relief };
   }
 
   // Оператор -> (не требуется, так как value_type — не объект)
@@ -447,7 +465,8 @@ public:
   begin(int64_t blockRows, int64_t blockCols,
         const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
         const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
-        const Eigen::Ref<const Eigen::MatrixX<T>>&relief, T m_z_min, T m_z_max, T m_dz,
+        const Eigen::Ref<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& relief,
+        T m_z_min, T m_z_max, T m_dz,
         std::optional<T> v_const) {
     return submatrix_iterator( blockRows, blockCols, depths, velocities, relief,
                               m_z_min, m_z_max, m_dz, v_const);
@@ -469,7 +488,7 @@ public:
   static submatrix_iterator end(int64_t blockRows, int64_t blockCols,
                                 const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& depths,
                                 const std::vector<Eigen::Ref<const Eigen::MatrixX<T>>>& velocities,
-                                const Eigen::Ref<const Eigen::MatrixX<T>>& relief,
+                                const Eigen::Ref<const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>>& relief,
                                   T z_min, T z_max, T dz, std::optional<T> v_const) {
     submatrix_iterator it(blockRows, blockCols,
                          depths, velocities, relief,  z_min, z_max, dz, v_const);
